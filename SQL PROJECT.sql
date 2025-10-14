@@ -1,0 +1,333 @@
+CREATE DATABASE grocerydb;
+USE grocerydb;
+-- drop database grocerydb;
+-- 1. Supplier Table
+CREATE TABLE IF NOT EXISTS supplier (
+ sup_id TINYINT PRIMARY KEY,
+ sup_name VARCHAR(255),
+ address TEXT
+);
+-- 2. Categories Table
+CREATE TABLE IF NOT EXISTS categories (
+ cat_id TINYINT PRIMARY KEY,
+ cat_name VARCHAR(255)
+);
+-- 3. Employees Table
+CREATE TABLE IF NOT EXISTS employees (
+ emp_id TINYINT PRIMARY KEY,
+ emp_name VARCHAR(255),
+ hire_date VARCHAR(255)
+);
+-- 4. Customers Table
+CREATE TABLE IF NOT EXISTS customers (
+ cust_id SMALLINT PRIMARY KEY,
+ cust_name VARCHAR(255),
+ address TEXT
+);
+-- 5. Products Table
+CREATE TABLE IF NOT EXISTS products (
+ prod_id TINYINT PRIMARY KEY,
+ prod_name VARCHAR(255),
+ sup_id TINYINT,
+ cat_id TINYINT,
+ price DECIMAL(10,2),
+ FOREIGN KEY (sup_id) REFERENCES supplier(sup_id)
+ ON UPDATE CASCADE ON DELETE CASCADE,
+ FOREIGN KEY (cat_id) REFERENCES categories(cat_id)
+ ON UPDATE CASCADE ON DELETE CASCADE
+);
+-- 6. Orders Table
+CREATE TABLE IF NOT EXISTS orders (
+ ord_id SMALLINT PRIMARY KEY,
+ cust_id SMALLINT,
+ emp_id TINYINT,
+ order_date VARCHAR(255),
+ FOREIGN KEY (cust_id) REFERENCES customers(cust_id)
+ ON UPDATE CASCADE ON DELETE CASCADE,
+ FOREIGN KEY (emp_id) REFERENCES employees(emp_id)
+ ON UPDATE CASCADE ON DELETE CASCADE
+);
+-- 7. Order_Details Table
+CREATE TABLE IF NOT EXISTS order_details (
+ ord_detID SMALLINT AUTO_INCREMENT PRIMARY KEY,
+ ord_id SMALLINT,
+ prod_id TINYINT,
+ quantity TINYINT,
+ each_price DECIMAL(10,2),
+ total_price DECIMAL(10,2),
+ FOREIGN KEY (ord_id) REFERENCES orders(ord_id)
+ ON UPDATE CASCADE ON DELETE CASCADE,
+ FOREIGN KEY (prod_id) REFERENCES products(prod_id)
+ ON UPDATE CASCADE ON DELETE CASCADE
+);
+-- Now Importing the records for existing tables we created, and checking the structure of the table.
+DESC supplier;
+DESC products;
+DESC orders;
+DESC order_details;
+DESC employees;
+DESC customers;
+DESC categories;
+-- Checking the Imported tables.
+SELECT *FROM supplier;
+SELECT *FROM categories;
+SELECT *FROM employees;
+SELECT *FROM customers;
+SELECT *FROM products;
+SELECT *FROM orders;
+SELECT *FROM order_details;
+-- Checking the foreign key integrity.
+-- Products must reference valid suppliers and categories
+SELECT prod_id, sup_id, cat_id
+FROM products
+WHERE sup_id NOT IN (SELECT sup_id FROM supplier)
+   OR cat_id NOT IN (SELECT cat_id FROM categories);
+
+-- Orders must reference valid customers and employees
+SELECT ord_id, cust_id, emp_id
+FROM orders
+WHERE cust_id NOT IN (SELECT cust_id FROM customers)
+   OR emp_id NOT IN (SELECT emp_id FROM employees);
+
+-- Order details must reference valid orders and products
+SELECT ord_detID, ord_id, prod_id
+FROM order_details
+WHERE ord_id NOT IN (SELECT ord_id FROM orders)
+   OR prod_id NOT IN (SELECT prod_id FROM products);
+
+-- Analysis:
+-- 1) CUSTOMER INSIGHTS
+-- Q1. How many unique customers have placed orders?
+SELECT count(distinct cust_name) as uniq_cust from customers;
+SELECT COUNT(DISTINCT cust_id) AS unique_customers
+FROM orders;
+
+-- Q2. Which customers have placed the highest number of orders?
+SELECT c.cust_id, c.cust_name, COUNT(*) AS orders_count
+FROM orders o
+JOIN customers c ON c.cust_id = o.cust_id
+GROUP BY c.cust_id, c.cust_name
+ORDER BY orders_count DESC
+LIMIT 1;
+
+-- Q3. What is the total and average purchase value per customer?
+SELECT c.cust_id, c.cust_name,
+       ROUND(SUM(t.order_total),2) AS total_spent,
+       ROUND(AVG(t.order_total),2) AS avg_order_value
+FROM (
+  SELECT ord_id, SUM(total_price) AS order_total
+  FROM order_details
+  GROUP BY ord_id
+) t
+JOIN orders o ON o.ord_id = t.ord_id
+JOIN customers c ON c.cust_id = o.cust_id
+GROUP BY c.cust_id, c.cust_name
+ORDER BY total_spent DESC;
+
+-- Q4. Who are the top 5 customers by total purchase amount?
+SELECT c.cust_id, c.cust_name, ROUND(SUM(t.order_total),2) AS total_spent
+FROM (
+  SELECT ord_id, SUM(total_price) AS order_total
+  FROM order_details
+  GROUP BY ord_id
+) t
+JOIN orders o ON o.ord_id = t.ord_id
+JOIN customers c ON c.cust_id = o.cust_id
+GROUP BY c.cust_id, c.cust_name
+ORDER BY total_spent DESC
+LIMIT 5;
+
+--  2) PRODUCT PERFORMANCE
+-- Q1. How many products exist in each category?
+SELECT cat.cat_name, COUNT(p.prod_id) AS products_count
+FROM categories cat
+LEFT JOIN products p ON p.cat_id = cat.cat_id
+GROUP BY cat.cat_name
+ORDER BY products_count DESC;
+
+-- Q2. What is the average price of products by category?
+SELECT cat.cat_name, ROUND(AVG(p.price),2) AS avg_price
+FROM categories cat
+JOIN products p ON p.cat_id = cat.cat_id
+GROUP BY cat.cat_name
+ORDER BY avg_price DESC;
+
+-- Q3. Which products have the highest total sales volume (by quantity)?
+SELECT p.prod_id, p.prod_name, SUM(od.quantity) AS total_qty
+FROM products p
+JOIN order_details od ON od.prod_id = p.prod_id
+GROUP BY p.prod_id, p.prod_name
+ORDER BY total_qty DESC
+LIMIT 1;
+
+-- Q4. What is the total revenue generated by each product?
+SELECT p.prod_name, ROUND(SUM(od.total_price),2) AS revenue
+FROM products p
+JOIN order_details od ON od.prod_id = p.prod_id
+GROUP BY p.prod_name
+ORDER BY revenue DESC
+LIMIT 10;
+
+-- Q5. How do product sales vary by category and supplier?
+SELECT cat.cat_name, s.sup_name,
+       ROUND(SUM(od.total_price),2) AS revenue,
+       SUM(od.quantity) AS total_qty
+FROM order_details od
+JOIN products p ON p.prod_id = od.prod_id
+JOIN categories cat ON cat.cat_id = p.cat_id
+JOIN supplier s ON s.sup_id = p.sup_id
+GROUP BY cat.cat_name, s.sup_name
+ORDER BY revenue DESC;
+
+-- 3) SALES AND ORDER TRENDS
+-- Q1. How many orders have been placed in total?
+SELECT COUNT(*) AS total_orders
+FROM orders;
+
+-- Q2. What is the average value per order?
+SELECT ROUND(AVG(order_total),2) AS avg_order_value
+FROM (
+  SELECT ord_id, SUM(total_price) AS order_total
+  FROM order_details
+  GROUP BY ord_id
+) t;
+
+-- Q3. On which dates were the most orders placed?
+SELECT STR_TO_DATE(order_date, '%Y-%m-%d') AS order_dt,
+       COUNT(*) AS orders_count
+FROM orders
+GROUP BY order_dt
+ORDER BY orders_count DESC
+LIMIT 10;
+
+-- Q4. What are the monthly trends in order volume and revenue?
+SELECT DATE_FORMAT(STR_TO_DATE(o.order_date, '%Y-%m-%d'), '%Y-%m') AS month,
+       COUNT(DISTINCT o.ord_id) AS orders_count,
+       ROUND(SUM(od.total_price),2) AS revenue
+FROM orders 
+JOIN order_details od ON od.ord_id = o.ord_id
+GROUP BY month
+ORDER BY month;
+
+-- Q5. How do order patterns vary across weekdays and weekends?
+SELECT CASE
+         WHEN DAYOFWEEK(STR_TO_DATE(order_date, '%Y-%m-%d')) IN (1,7)
+           THEN 'Weekend'
+         ELSE 'Weekday'
+       END AS day_type,
+       COUNT(DISTINCT o.ord_id) AS orders_count,
+       ROUND(SUM(od.total_price),2) AS revenue
+FROM orders o
+JOIN order_details od ON od.ord_id = o.ord_id
+GROUP BY day_type;
+
+/******************************
+  4) SUPPLIER CONTRIBUTION
+******************************/
+
+-- Q1. How many suppliers are there in the database?
+SELECT COUNT(*) AS suppliers_count
+FROM supplier;
+
+-- Q2. Which supplier provides the most products?
+SELECT s.sup_name, COUNT(p.prod_id) AS products_count
+FROM supplier s
+JOIN products p ON p.sup_id = s.sup_id
+GROUP BY s.sup_name
+ORDER BY products_count DESC
+LIMIT 1;
+
+-- Q3. What is the average price of products from each supplier?
+SELECT s.sup_name, ROUND(AVG(p.price),2) AS avg_price
+FROM supplier s
+JOIN products p ON p.sup_id = s.sup_id
+GROUP BY s.sup_name;
+
+-- Q4. Which suppliers contribute the most to total revenue?
+SELECT s.sup_name, ROUND(SUM(od.total_price),2) AS revenue
+FROM supplier s
+JOIN products p ON p.sup_id = s.sup_id
+JOIN order_details od ON od.prod_id = p.prod_id
+GROUP BY s.sup_name
+ORDER BY revenue DESC;
+
+
+/******************************
+  5) EMPLOYEE PERFORMANCE
+******************************/
+
+-- Q1. How many employees have processed orders?
+SELECT COUNT(DISTINCT emp_id) AS employees_involved
+FROM orders;
+
+-- Q2. Which employees have handled the most orders?
+SELECT e.emp_name, COUNT(*) AS orders_handled
+FROM employees e
+JOIN orders o ON o.emp_id = e.emp_id
+GROUP BY e.emp_name
+ORDER BY orders_handled DESC;
+
+-- Q3. What is the total sales value processed by each employee?
+SELECT e.emp_name, ROUND(SUM(od.total_price),2) AS total_sales
+FROM employees e
+JOIN orders o ON o.emp_id = e.emp_id
+JOIN order_details od ON od.ord_id = o.ord_id
+GROUP BY e.emp_name
+ORDER BY total_sales DESC;
+
+-- Q4. What is the average order value handled per employee?
+WITH order_totals AS (
+  SELECT o.ord_id, o.emp_id, SUM(od.total_price) AS order_total
+  FROM orders o
+  JOIN order_details od ON od.ord_id = o.ord_id
+  GROUP BY o.ord_id, o.emp_id
+)
+SELECT e.emp_name, ROUND(AVG(ot.order_total),2) AS avg_order_value
+FROM order_totals ot
+JOIN employees e ON e.emp_id = ot.emp_id
+GROUP BY e.emp_name
+ORDER BY avg_order_value DESC;
+
+
+/******************************
+  6) ORDER DETAILS DEEP DIVE
+******************************/
+
+-- Q1. What is the relationship between quantity ordered and total price?
+SELECT quantity, total_price
+FROM order_details;
+
+-- Q2. What is the average quantity ordered per product?
+SELECT p.prod_name, ROUND(AVG(od.quantity),2) AS avg_qty
+FROM products p
+JOIN order_details od ON od.prod_id = p.prod_id
+GROUP BY p.prod_name
+ORDER BY avg_qty DESC;
+
+-- Q3. How does the unit price vary across products and orders?
+SELECT p.prod_name,
+       ROUND(AVG(od.each_price),2) AS avg_price,
+       MIN(od.each_price) AS min_price,
+       MAX(od.each_price) AS max_price
+FROM products p
+JOIN order_details od ON od.prod_id = p.prod_id
+GROUP BY p.prod_name
+ORDER BY avg_price DESC;
+
+
+
+
+
+CREATE TABLE orders_backup AS SELECT * FROM orders;
+UPDATE orders
+SET order_date = TRIM(REPLACE(order_date, CHAR(13), ''));
+ALTER TABLE orders ADD COLUMN order_dt DATE;
+
+UPDATE orders
+SET order_dt = COALESCE(
+  STR_TO_DATE(order_date, '%Y-%m-%d'),         -- 2025-09-25 or 2025-09-25 14:00:00 (date part)
+  STR_TO_DATE(SUBSTRING_INDEX(order_date,' ',1), '%Y-%m-%d'),
+  STR_TO_DATE(order_date, '%d-%m-%Y'),         -- 25-09-2025
+  STR_TO_DATE(order_date, '%d/%m/%Y'),         -- 25/09/2025
+  STR_TO_DATE(order_date, '%m/%d/%Y')          -- 09/25/2025
+);
