@@ -37,3 +37,19 @@ It provides insights into **customer behavior**, **sales trends**, **product per
 All foreign keys are created with:
 ```sql
 ON UPDATE CASCADE ON DELETE CASCADE
+
+## 📖 Project Overview
+This project demonstrates how to design, implement, and analyze a **relational database** for a grocery store using **MySQL**.  
+It covers every aspect of SQL — from **database creation and normalization** to **business insights and reporting queries**.
+
+The main goal of this project is to simulate real-world data analytics scenarios using SQL and to extract meaningful patterns from transactional data.
+
+---
+
+## 🧱 Database Creation
+
+### 🔹 Database Name:
+```sql
+CREATE DATABASE grocerydb;
+USE grocerydb;
+
